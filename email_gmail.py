@@ -5,22 +5,28 @@ import datetime
 from bs4 import BeautifulSoup 
 import csv
 import re
+from dotenv import dotenv_values
 
 CHECK_INFO_LOCATION = '/home/rg/Documents/Study/PET_projects/Vkusvill/check_info.csv'
 DATA_LOCATION = '/home/rg/Documents/Study/PET_projects/Vkusvill/data.csv'
+INCREMENT_FILE = '/home/rg/Documents/Study/PET_projects/Vkusvill/increment.txt'
+HEADERS = {
+    DATA_LOCATION: ['id', 'msg_type', 'product_name', 'price', 'qty', 'amount', 'uom'],
+    CHECK_INFO_LOCATION:['id', 'msg_type', 'address1', 'address2', 'date', 'cashier', 'total']
+    }
 
-def get_increment(filename=r'/home/rg/Documents/Study/PET_projects/Vkusvill/increment.txt'):
+def get_increment(filename=INCREMENT_FILE):
     with open(filename, 'r') as f:
         num = f.readline()
         if num: return int(num)
         else: return 0
-def set_increment(num=None, filename=r'/home/rg/Documents/Study/PET_projects/Vkusvill/increment.txt'):
+def set_increment(num=None, filename=INCREMENT_FILE):
     if not num:
         num = get_increment(filename) + 1
     with open(filename, 'w') as f:
         f.write(str(num))
 
-def gmail_connect(username='', password=''):
+def gmail_connect(username, password):
     imap = imaplib.IMAP4_SSL("imap.gmail.com")
     try:
         imap.login(username, password)
@@ -44,18 +50,18 @@ def get_msg(imap, num):
             # Парсинг письма
             msg = email.message_from_bytes(response_part[1])
             msg_from = re.search('^.*\<(\S*\@\S*)\>\s*$', msg['from']).group(1)
+            # msg_from = decode_header(msg['from'])[1][0].decode()            
+            # Декодирование заголовка "Subject"
+            # subject, encoding = decode_header(msg["Subject"])[0]
+            # if isinstance(subject, bytes):
+            #     subject = subject.decode(encoding if encoding else 'utf-8')
+            # Если письмо состоит из нескольких частей
             if msg.is_multipart():
                 for part in msg.walk():
                     if "text/" in part.get_content_type():
                         return msg_from, part.get_payload(decode=True)                       
             else:
                 return msg_from, msg.get_payload(decode=True).decode()
-def check_type(msg_from):
-    if msg_from == 'echeck@1-ofd.ru': return '1-ofd'
-    elif msg_from == 'noreply@ofd.ru': return 'ofd'
-    elif msg_from == 'no data': return 'no data'
-    else: return 'unknown'
-
 def parse(msg_body, msg_type):
     if msg_body: soup = BeautifulSoup(msg_body, 'html.parser')
     else: return
@@ -63,7 +69,6 @@ def parse(msg_body, msg_type):
         case 'echeck@1-ofd.ru': return parse_1_ofd(list(soup.stripped_strings))
         case 'noreply@ofd.ru': return parse_ofd(list(soup.stripped_strings))
         case _: return None
-
 
 def parse_1_ofd(body_list):
     check_info = []
@@ -185,16 +190,18 @@ def parse_ofd(body_list):
                 case 'ФН': check_fn = value
                 case 'ФПД': check_fpd = value
                 case 'ИТОГ': total = item
-    clean_check_info = [address, address_2, check_date, check_cashier, total]#, check_num, shift_num, check_inn, check_rn, check_fd, check_fn, check_fpd]
+    clean_check_info = [address, address_2, check_date, check_cashier, total]
     return {
             'check_info':clean_check_info,
             'items_data':clean_items_data
             }
-def write_csv(data, key, csv_location):
+def write_csv(data, key, csv_location, headers=None):
         if data:
             with open(csv_location, 'a', newline='') as csvfile:
                 spamwriter = csv.writer(csvfile, delimiter=';',
                                     quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                if headers:
+                    spamwriter.writerow(headers)
                 if isinstance(data[0], list):
                     for row in data:
                         spamwriter.writerow(key + row)
@@ -202,14 +209,19 @@ def write_csv(data, key, csv_location):
                     spamwriter.writerow(key + data)
 
 if __name__ == "__main__":
-    imap = gmail_connect()
+    config = dotenv_values('Vkusvill/.env')
+    imap = gmail_connect(username = config['GMAIL_USERNAME'], password=config['GMAIL_PASSWORD'])
     for i in range(1000):
         latest_loaded_id = get_increment()
+        if latest_loaded_id==0:
+            headers = HEADERS
+        else: 
+            headers = {CHECK_INFO_LOCATION:None, DATA_LOCATION:None}
         msg_type, msg_body = get_msg(imap, latest_loaded_id)
         data = parse(msg_body, msg_type)
         if data:
-            write_csv(data['check_info'], [latest_loaded_id, msg_type], CHECK_INFO_LOCATION)
-            write_csv(data['items_data'], [latest_loaded_id, msg_type], DATA_LOCATION)
+            write_csv(data['check_info'], [latest_loaded_id, msg_type], CHECK_INFO_LOCATION, headers[CHECK_INFO_LOCATION])
+            write_csv(data['items_data'], [latest_loaded_id, msg_type], DATA_LOCATION, headers[DATA_LOCATION])
             print(f"Msg #{latest_loaded_id} was loaded. Item count: {len(data['items_data'])}. Check date is {data['check_info'][2]}")
             set_increment()
         else:
@@ -217,3 +229,4 @@ if __name__ == "__main__":
             break     
     imap.close()
     imap.logout()
+

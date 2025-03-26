@@ -5,6 +5,8 @@ from bs4 import BeautifulSoup
 import csv
 import re
 from dotenv import dotenv_values
+from pypdf import PdfReader
+from unicodedata import normalize
 
 CSV_LOCATIONS = {'check_info':'/home/rg/Documents/Study/PET_projects/Vkusvill/check_info.csv',
                  'items_data': '/home/rg/Documents/Study/PET_projects/Vkusvill/data.csv'}
@@ -32,11 +34,14 @@ class Message(imaplib.IMAP4_SSL):
             print("Ошибка входа. Проверьте имя пользователя и пароль.")
             return
         self.select(self.mailbox)
-        self.msg_types = {'noreply@ofd.ru':Check_ofd, 'echeck@1-ofd.ru':Check_1_ofd}
+        self.msg_types = {
+            'noreply@ofd.ru':Check_ofd, 
+            'echeck@1-ofd.ru':Check_1_ofd,
+            'noreply-cloudkassir@cp.ru':CheckPDF}
 
     def get_msg(self, num):
         self.literal = u"ВКУСВИЛЛ".encode("utf-8")
-        status, messages = self.search('UTF-8', 'SUBJECT')
+        status, messages = self.search('UTF-8', 'OR (FROM "noreply-cloudkassir@cp.ru") SUBJECT')
         email_ids = messages[0].split()
         if num > len(email_ids)-1: 
             return Check()
@@ -46,13 +51,19 @@ class Message(imaplib.IMAP4_SSL):
             if isinstance(response_part, tuple):
                 # Парсинг письма
                 msg = email.message_from_bytes(response_part[1])
-                msg_from = re.search('^.*\<(\S*\@\S*)\>\s*$', msg['from']).group(1)
+                msg_from = re.search(r"[\w.-]+@[\w.-]+", msg['from']).group(0)
+                msg_body = None
                 if msg.is_multipart():
                     for part in msg.walk():
-                        if "text/" in part.get_content_type():
-                            return self.msg_types[msg_from](msg_type=msg_from, msg_body=part.get_payload(decode=True))
+                        if "text/" in part.get_content_type() and not msg_body:
+                            msg_body = part.get_payload(decode=True)
+                            # return self.msg_types[msg_from](msg_body=part.get_payload(decode=True))
+                        if "application/pdf" in part.get_content_type():
+                            msg_body = part.get_payload(decode=True)
+                            # return self.msg_types[msg_from](msg_body=part.get_payload(decode=True))
                 else:
-                    return self.msg_types[msg_from](msg_type=msg_from, msg_body=msg.get_payload(decode=True).decode())
+                    msg_body=msg.get_payload(decode=True).decode()    
+            return self.msg_types[msg_from](msg_body)
 
 class Check:
     HEADERS = {
@@ -62,9 +73,9 @@ class Check:
     CSV_PARAMS = {"delimiter":";",
                   "quotechar":"|", 
                   "quoting":csv.QUOTE_MINIMAL}
-    def __init__(self, msg_type='no data', msg_body=''):
+    def __init__(self, msg_type='no data'): #, msg_body=''):
         self.msg_type = msg_type
-        self.body_list = list(BeautifulSoup(msg_body, 'html.parser').stripped_strings)
+        # self.body_list = list(BeautifulSoup(msg_body, 'html.parser').stripped_strings)
         self.check_info = []
         self.items_data = []
         self.parsed = False
@@ -85,14 +96,16 @@ class Check:
                         spamwriter.writerow(key + row)
                 else:
                     spamwriter.writerow(key + data)
+
     def print_status(self, msg_num):
         print(f"Msg #{msg_num} was loaded. Item count: {len(self.items_data)}. Check date is {self.check_info[2]}")
 
 
     
 class Check_ofd(Check):
-    def _init__(self, msg_body):
-        super().__init__(msg_type = 'ofd', msg_body = msg_body)
+    def __init__(self, msg_body):
+        super().__init__(msg_type = 'ofd')
+        self.body_list = list(BeautifulSoup(msg_body, 'html.parser').stripped_strings)
 
     def parse(self):
         raw_check_info = []
@@ -171,9 +184,10 @@ class Check_ofd(Check):
         self.parsed = True
 
 class Check_1_ofd(Check):
-    def _init__(self, msg_body):
-        super().__init__(msg_type='1-ofd', msg_body=msg_body)
-
+    def __init__(self, msg_body):
+        super().__init__(msg_type='1-ofd') #, msg_body=msg_body)
+        self.body_list = list(BeautifulSoup(msg_body, 'html.parser').stripped_strings)
+        
     def parse(self):
         k = 0
         row = []
@@ -217,12 +231,45 @@ class Check_1_ofd(Check):
         self.items_data = clean_items_data[:]
         self.parsed = True
 
+class CheckPDF(Check):
+    def __init__(self, msg_body):
+        super().__init__(msg_type = 'pdf')
+        with open("temp.pdf", 'wb') as f:
+            f.write(msg_body)
+        self.reader = PdfReader("temp.pdf")
+
+    def parse(self):
+        full_data = []
+        re_start = r"^([1-9]\d?\ )(.*)"
+        re_end = r"(.*)((\ \d+\,\d{2}){3})$"
+        re_total = r"^([1-9]\d?\ )(.*)((\ \d+\,\d{2}){3})$"
+        for page in self.reader.pages:
+            text = page.extract_text(extraction_mode='layout')
+            # Регулярное выражение для извлечения полей и значений
+            pattern_header = re.compile(r"(Дата выдачи|Место осуществления расчета|Адрес осуществления расчетов|ИТОГ)\s+(.*)")
+            pattern_fields = re.compile(r"(?:\d+ +)(.+?)\s+(\d+,\d+)\s+(\d+,\d+)\s+(\d+,\d+)", re.MULTILINE)
+            # Поиск совпадений
+            matches_header = re.findall(pattern_header, text)
+            matches_fields = re.findall(pattern_fields, text)
+            for field, value in matches_header:
+                match field:
+                    #! Добавить корректную обработку даты
+                    case 'Дата выдачи': check_date = value
+                    case 'Место осуществления расчета': address = value.strip()
+                    case  'Адрес осуществления расчетов': address_2 = value.strip()
+                    case 'ИТОГ': total = normalize('NFKD', value.strip()).replace(',','.').replace(' ','')
+            for product_name, price, quantity, amount in matches_fields:
+                self.items_data.append([product_name.strip(), price.strip().replace(',','.'), quantity.strip().replace(',','.'), amount.strip().replace(',','.'), 'N/A'])
+        else:
+            self.check_info = [address, address_2, check_date, 'N/A', total]
+            self.parsed = True
+
 if __name__ == "__main__":
     config = dotenv_values('Vkusvill/.env')
     msg = Message(username = config['GMAIL_USERNAME'],
                   password=config['GMAIL_PASSWORD'],
                   mailbox=config['MAILBOX'])
-    for i in range(1000):
+    for i in range(100):
         latest_loaded_id = get_increment()
         new_check = msg.get_msg(latest_loaded_id)            
         new_check.parse()
@@ -231,7 +278,7 @@ if __name__ == "__main__":
                 new_check.write_to_csv(data_type=data_type,
                                        key=[latest_loaded_id, new_check.msg_type],
                                        csv_location=CSV_LOCATIONS[data_type],
-                                       headers_required=latest_loaded_id>0
+                                       headers_required=latest_loaded_id=0
                 )
             new_check.print_status(latest_loaded_id)
             set_increment()

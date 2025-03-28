@@ -23,47 +23,63 @@ def set_increment(num=None, filename=INCREMENT_FILE):
         num = get_increment(filename) + 1
     with open(filename, 'w') as f:
         f.write(str(num))
-
-class Message(imaplib.IMAP4_SSL):
+class IMAPHandler:
     def __init__(self, username, password, mailbox):
         self.mailbox = mailbox
-        super().__init__("imap.gmail.com")
+        self.imap = imaplib.IMAP4_SSL("imap.gmail.com")
         try:
-            self.login(username, password)
+            self.imap.login(username, password)
         except imaplib.IMAP4.error:
             print("Ошибка входа. Проверьте имя пользователя и пароль.")
-            return
-        self.select(self.mailbox)
-        self.msg_types = {
-            'noreply@ofd.ru':Check_ofd, 
-            'echeck@1-ofd.ru':Check_1_ofd,
-            'noreply-cloudkassir@cp.ru':CheckPDF}
+            raise
+        self.imap.select(self.mailbox)
 
-    def get_msg(self, num):
-        self.literal = u"ВКУСВИЛЛ".encode("utf-8")
-        status, messages = self.search('UTF-8', 'OR (FROM "noreply-cloudkassir@cp.ru") SUBJECT')
+    def get_message(self, num):
+        """Получить письмо по номеру."""
+        literal = u"ВКУСВИЛЛ".encode("utf-8")
+        status, messages = self.imap.search('UTF-8', 'OR (FROM "noreply-cloudkassir@cp.ru") SUBJECT')
         email_ids = messages[0].split()
-        if num > len(email_ids)-1: 
-            return Check()
-        res, msg = self.fetch(email_ids[num], "(RFC822)")
-        # Получение содержимого письма
+        if num > len(email_ids) - 1:
+            return None  # Возвращаем None, если письма нет
+        res, msg = self.imap.fetch(email_ids[num], "(RFC822)")
         for response_part in msg:
             if isinstance(response_part, tuple):
-                # Парсинг письма
                 msg = email.message_from_bytes(response_part[1])
-                msg_from = re.search(r"[\w.-]+@[\w.-]+", msg['from']).group(0)
-                msg_body = None
-                if msg.is_multipart():
-                    for part in msg.walk():
-                        if "text/" in part.get_content_type() and not msg_body:
-                            msg_body = part.get_payload(decode=True)
-                            # return self.msg_types[msg_from](msg_body=part.get_payload(decode=True))
-                        if "application/pdf" in part.get_content_type():
-                            msg_body = part.get_payload(decode=True)
-                            # return self.msg_types[msg_from](msg_body=part.get_payload(decode=True))
-                else:
-                    msg_body=msg.get_payload(decode=True).decode()    
-            return self.msg_types[msg_from](msg_body)
+                return msg
+        return None
+
+    def close(self):
+        """Закрыть соединение."""
+        self.imap.logout()
+
+class Message:
+    def __init__(self, username, password, mailbox):
+        self.imap_handler = IMAPHandler(username, password, mailbox)
+        self.msg_types = {
+            'noreply@ofd.ru': Check_ofd,
+            'echeck@1-ofd.ru': Check_1_ofd,
+            'noreply-cloudkassir@cp.ru': CheckPDF
+        }
+
+    def get_msg(self, num):
+        """Получить и обработать письмо."""
+        msg = self.imap_handler.get_message(num)
+        if not msg:
+            return Check()
+
+        msg_from = re.search(r"[\w.-]+@[\w.-]+", msg['from']).group(0)
+        msg_body = None
+
+        if msg.is_multipart():
+            for part in msg.walk():
+                if "text/" in part.get_content_type() and not msg_body:
+                    msg_body = part.get_payload(decode=True)
+                if "application/pdf" in part.get_content_type():
+                    msg_body = part.get_payload(decode=True)
+        else:
+            msg_body = msg.get_payload(decode=True).decode()
+
+        return self.msg_types[msg_from](msg_body)
 
 class Check:
     HEADERS = {
@@ -266,22 +282,28 @@ class CheckPDF(Check):
 
 if __name__ == "__main__":
     config = dotenv_values('Vkusvill/.env')
-    msg = Message(username = config['GMAIL_USERNAME'],
-                  password=config['GMAIL_PASSWORD'],
-                  mailbox=config['MAILBOX'])
-    for i in range(100):
-        latest_loaded_id = get_increment()
-        new_check = msg.get_msg(latest_loaded_id)            
-        new_check.parse()
-        if new_check.parsed:
-            for data_type in ('check_info', 'items_data'):
-                new_check.write_to_csv(data_type=data_type,
-                                       key=[latest_loaded_id, new_check.msg_type],
-                                       csv_location=CSV_LOCATIONS[data_type],
-                                       headers_required=latest_loaded_id=0
-                )
-            new_check.print_status(latest_loaded_id)
-            set_increment()
-        else:
-            print('No data. Break.')
-            break
+    msg = Message(
+        username=config['GMAIL_USERNAME'],
+        password=config['GMAIL_PASSWORD'],
+        mailbox=config['MAILBOX']
+    )
+    try:
+        for i in range(100):
+            latest_loaded_id = get_increment()
+            new_check = msg.get_msg(latest_loaded_id)
+            new_check.parse()
+            if new_check.parsed:
+                for data_type in ('check_info', 'items_data'):
+                    new_check.write_to_csv(
+                        data_type=data_type,
+                        key=[latest_loaded_id, new_check.msg_type],
+                        csv_location=CSV_LOCATIONS[data_type],
+                        headers_required=latest_loaded_id == 0
+                    )
+                new_check.print_status(latest_loaded_id)
+                set_increment()
+            else:
+                print('No data. Break.')
+                break
+    finally:
+        msg.imap_handler.close()  # Закрыть соединение с IMAP

@@ -8,6 +8,8 @@ from dotenv import dotenv_values
 from pypdf import PdfReader
 from unicodedata import normalize
 import io
+import pymorphy2
+import locale
 
 CSV_LOCATIONS = {'check_info':'/home/rg/Documents/Study/PET_projects/Vkusvill/check_info.csv',
                  'items_data': '/home/rg/Documents/Study/PET_projects/Vkusvill/data.csv'}
@@ -98,6 +100,35 @@ class Check:
         self.check_info = []
         self.items_data = []
         self.parsed = False
+    @staticmethod 
+    def parse_russian_datetime(date_string):
+        """
+        Функция для парсинга дат в формате "дд месяц гггг г. в чч:мм"
+        Поддерживает разные падежи месяцев
+        
+        Примеры входных строк:
+        - "06 марта 2025 г. в 13:59"
+        - "19 ноябрь 2024 г. в 11:26"
+        """
+        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        morph = pymorphy2.MorphAnalyzer()
+        # Регулярное выражение для извлечения компонентов даты
+        pattern = r'(\d{1,2})\s+([а-яА-Я]+)\s+(\d{4})\s+г\.\s+в\s+(\d{1,2}:\d{2})'
+        match = re.match(pattern, date_string)
+        if not match:
+            raise ValueError("Неверный формат даты")
+        day, month_ru, year, time = match.groups()
+        # Приводим месяц к родительному падежу
+        month = morph.parse(month_ru)[0].inflect({'gent'}).word.title()
+        # Формируем строку для парсинга
+        date_str = f"{day} {month} {year} {time}"
+        # Парсим в datetime объект
+        try:
+            dt = datetime.strptime(date_str, '%d %B %Y %H:%M')
+        except ValueError as e:
+            raise ValueError(f"Ошибка при парсинге даты: {e}")
+        return dt
+
 
     def parse(self):
         pass
@@ -266,8 +297,7 @@ class CheckPDF(Check):
             matches_fields = re.findall(pattern_fields, text)
             for field, value in matches_header:
                 match field:
-                    #! Добавить корректную обработку даты
-                    case 'Дата выдачи': check_date = value
+                    case 'Дата выдачи': check_date = Check.parse_russian_datetime(value.strip())
                     case 'Место осуществления расчета': address = value.strip()
                     case 'Адрес осуществления расчетов': address_2 = value.strip()
                     case 'ИТОГ': total = normalize('NFKD', value.strip()).replace(',','.').replace(' ','')

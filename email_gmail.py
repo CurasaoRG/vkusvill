@@ -250,10 +250,9 @@ class Check_1_ofd(Check):
 
 class CheckPDF(Check):
     def __init__(self, msg_body):
-        super().__init__(msg_type = 'pdf')
-        with open("temp.pdf", 'wb') as f:
-            f.write(msg_body)
-        self.reader = PdfReader("temp.pdf")
+        super().__init__(msg_type='pdf')
+        # Создаем байтовый поток вместо записи на диск
+        self.reader = PdfReader(io.BytesIO(msg_body))
 
     def parse(self):
         full_data = []

@@ -26,6 +26,7 @@ def set_increment(num=None, filename=INCREMENT_FILE):
         num = get_increment(filename) + 1
     with open(filename, 'w') as f:
         f.write(str(num))
+
 class IMAPHandler:
     def __init__(self, username, password, mailbox):
         self.mailbox = mailbox
@@ -124,7 +125,7 @@ class Check:
         date_str = f"{day} {month} {year} {time}"
         # Парсим в datetime объект
         try:
-            dt = datetime.strptime(date_str, '%d %B %Y %H:%M')
+            dt = datetime.datetime.strptime(date_str, '%d %B %Y %H:%M')
         except ValueError as e:
             raise ValueError(f"Ошибка при парсинге даты: {e}")
         return dt
@@ -148,8 +149,7 @@ class Check:
                     spamwriter.writerow(key + data)
 
     def print_status(self, msg_num):
-        print(f"Msg #{msg_num} was loaded. Item count: {len(self.items_data)}. Check date is {self.check_info[2]}")
-
+        print(f"Msg #{msg_num} was loaded. Type: {self.msg_type}. Item count: {len(self.items_data)}. Check date is {self.check_info[2]}")
 
     
 class Check_ofd(Check):

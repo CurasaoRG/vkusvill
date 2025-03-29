@@ -7,6 +7,7 @@ import re
 from dotenv import dotenv_values
 from pypdf import PdfReader
 from unicodedata import normalize
+import io
 
 CSV_LOCATIONS = {'check_info':'/home/rg/Documents/Study/PET_projects/Vkusvill/check_info.csv',
                  'items_data': '/home/rg/Documents/Study/PET_projects/Vkusvill/data.csv'}

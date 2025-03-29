@@ -37,7 +37,7 @@ class IMAPHandler:
 
     def get_message(self, num):
         """Получить письмо по номеру."""
-        literal = u"ВКУСВИЛЛ".encode("utf-8")
+        self.imap.literal = u"ВКУСВИЛЛ".encode("utf-8")
         status, messages = self.imap.search('UTF-8', 'OR (FROM "noreply-cloudkassir@cp.ru") SUBJECT')
         email_ids = messages[0].split()
         if num > len(email_ids) - 1:
@@ -90,9 +90,11 @@ class Check:
     CSV_PARAMS = {"delimiter":";",
                   "quotechar":"|", 
                   "quoting":csv.QUOTE_MINIMAL}
-    def __init__(self, msg_type='no data'): #, msg_body=''):
+    # Константа для индекса даты в check_info
+    CHECK_DATE_INDEX = 2
+
+    def __init__(self, msg_type='no data'):
         self.msg_type = msg_type
-        # self.body_list = list(BeautifulSoup(msg_body, 'html.parser').stripped_strings)
         self.check_info = []
         self.items_data = []
         self.parsed = False
@@ -133,7 +135,6 @@ class Check_ofd(Check):
         row = []
         for i, tag in enumerate(self.body_list):
             match tag:
-
                 case 'Кассовый чек / Приход':
                     info = True
                     continue
@@ -202,7 +203,7 @@ class Check_ofd(Check):
 
 class Check_1_ofd(Check):
     def __init__(self, msg_body):
-        super().__init__(msg_type='1-ofd') #, msg_body=msg_body)
+        super().__init__(msg_type='1-ofd')
         self.body_list = list(BeautifulSoup(msg_body, 'html.parser').stripped_strings)
         
     def parse(self):
@@ -255,10 +256,6 @@ class CheckPDF(Check):
         self.reader = PdfReader(io.BytesIO(msg_body))
 
     def parse(self):
-        full_data = []
-        re_start = r"^([1-9]\d?\ )(.*)"
-        re_end = r"(.*)((\ \d+\,\d{2}){3})$"
-        re_total = r"^([1-9]\d?\ )(.*)((\ \d+\,\d{2}){3})$"
         for page in self.reader.pages:
             text = page.extract_text(extraction_mode='layout')
             # Регулярное выражение для извлечения полей и значений
@@ -272,7 +269,7 @@ class CheckPDF(Check):
                     #! Добавить корректную обработку даты
                     case 'Дата выдачи': check_date = value
                     case 'Место осуществления расчета': address = value.strip()
-                    case  'Адрес осуществления расчетов': address_2 = value.strip()
+                    case 'Адрес осуществления расчетов': address_2 = value.strip()
                     case 'ИТОГ': total = normalize('NFKD', value.strip()).replace(',','.').replace(' ','')
             for product_name, price, quantity, amount in matches_fields:
                 self.items_data.append([product_name.strip(), price.strip().replace(',','.'), quantity.strip().replace(',','.'), amount.strip().replace(',','.'), 'N/A'])

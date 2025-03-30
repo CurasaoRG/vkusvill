@@ -10,22 +10,41 @@ from unicodedata import normalize
 import io
 import pymorphy2
 import locale
+import os
 
 CSV_LOCATIONS = {'check_info':'/home/rg/Documents/Study/PET_projects/Vkusvill/check_info.csv',
                  'items_data': '/home/rg/Documents/Study/PET_projects/Vkusvill/data.csv'}
 INCREMENT_FILE = '/home/rg/Documents/Study/PET_projects/Vkusvill/increment.txt'
 
 
-def get_increment(filename=INCREMENT_FILE):
-    with open(filename, 'r') as f:
-        num = f.readline()
-        if num: return int(num)
-        else: return 0
-def set_increment(num=None, filename=INCREMENT_FILE):
-    if not num:
-        num = get_increment(filename) + 1
-    with open(filename, 'w') as f:
-        f.write(str(num))
+class IncrementHandler:
+    def __init__(self, filename):
+        self.filename = filename
+        # Проверяем существование файла и создаём его, если он отсутствует
+        if not os.path.exists(self.filename):
+            with open(self.filename, 'w') as f:
+                f.write("0")  # Инициализируем значение инкремента как 0
+
+    def get(self):
+        """Получить текущее значение инкремента."""
+        try:
+            with open(self.filename, 'r') as f:
+                num = f.readline().strip()  # Убираем лишние пробелы/переносы
+                return int(num) if num else 0
+        except Exception as e:
+            print(f"Ошибка при чтении инкремента: {e}")
+            return 0
+
+    def set(self, num=None):
+        """Установить новое значение инкремента.
+        Если num не указано, увеличивает текущее значение на 1."""
+        current_value = self.get()
+        new_value = num if num is not None else current_value + 1
+        try:
+            with open(self.filename, 'w') as f:
+                f.write(str(new_value))
+        except Exception as e:
+            print(f"Ошибка при записи инкремента: {e}")
 
 class IMAPHandler:
     def __init__(self, username, password, mailbox):
@@ -54,6 +73,7 @@ class IMAPHandler:
 
     def close(self):
         """Закрыть соединение."""
+        self.imap.close()
         self.imap.logout()
 
 class Message:
@@ -101,6 +121,7 @@ class Check:
         self.check_info = []
         self.items_data = []
         self.parsed = False
+
     @staticmethod 
     def parse_russian_datetime(date_string):
         """
@@ -303,12 +324,12 @@ class CheckPDF(Check):
                     case 'ИТОГ': total = normalize('NFKD', value.strip()).replace(',','.').replace(' ','')
             for product_name, price, quantity, amount in matches_fields:
                 self.items_data.append([product_name.strip(), price.strip().replace(',','.'), quantity.strip().replace(',','.'), amount.strip().replace(',','.'), 'N/A'])
-        else:
-            self.check_info = [address, address_2, check_date, 'N/A', total]
-            self.parsed = True
+        self.check_info = [address, address_2, check_date, 'N/A', total]
+        self.parsed = True
 
 if __name__ == "__main__":
     config = dotenv_values('Vkusvill/.env')
+    increment_handler = IncrementHandler(INCREMENT_FILE)
     msg = Message(
         username=config['GMAIL_USERNAME'],
         password=config['GMAIL_PASSWORD'],
@@ -316,7 +337,7 @@ if __name__ == "__main__":
     )
     try:
         for i in range(100):
-            latest_loaded_id = get_increment()
+            latest_loaded_id = increment_handler.get()
             new_check = msg.get_msg(latest_loaded_id)
             new_check.parse()
             if new_check.parsed:
@@ -328,7 +349,7 @@ if __name__ == "__main__":
                         headers_required=latest_loaded_id == 0
                     )
                 new_check.print_status(latest_loaded_id)
-                set_increment()
+                increment_handler.set()
             else:
                 print('No data. Break.')
                 break

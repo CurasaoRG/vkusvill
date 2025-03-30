@@ -5,54 +5,105 @@ from bs4 import BeautifulSoup
 import csv
 import re
 from dotenv import dotenv_values
+from pypdf import PdfReader
+from unicodedata import normalize
+import io
+import pymorphy2
+import locale
+import os
 
 CSV_LOCATIONS = {'check_info':'/home/rg/Documents/Study/PET_projects/Vkusvill/check_info.csv',
                  'items_data': '/home/rg/Documents/Study/PET_projects/Vkusvill/data.csv'}
 INCREMENT_FILE = '/home/rg/Documents/Study/PET_projects/Vkusvill/increment.txt'
 
 
-def get_increment(filename=INCREMENT_FILE):
-    with open(filename, 'r') as f:
-        num = f.readline()
-        if num: return int(num)
-        else: return 0
-def set_increment(num=None, filename=INCREMENT_FILE):
-    if not num:
-        num = get_increment(filename) + 1
-    with open(filename, 'w') as f:
-        f.write(str(num))
+class IncrementHandler:
+    def __init__(self, filename):
+        self.filename = filename
+        # Проверяем существование файла и создаём его, если он отсутствует
+        if not os.path.exists(self.filename):
+            with open(self.filename, 'w') as f:
+                f.write("0")  # Инициализируем значение инкремента как 0
 
-class Message(imaplib.IMAP4_SSL):
+    def get(self):
+        """Получить текущее значение инкремента."""
+        try:
+            with open(self.filename, 'r') as f:
+                num = f.readline().strip()  # Убираем лишние пробелы/переносы
+                return int(num) if num else 0
+        except Exception as e:
+            print(f"Ошибка при чтении инкремента: {e}")
+            return 0
+
+    def set(self, num=None):
+        """Установить новое значение инкремента.
+        Если num не указано, увеличивает текущее значение на 1."""
+        current_value = self.get()
+        new_value = num if num is not None else current_value + 1
+        try:
+            with open(self.filename, 'w') as f:
+                f.write(str(new_value))
+        except Exception as e:
+            print(f"Ошибка при записи инкремента: {e}")
+
+class IMAPHandler:
     def __init__(self, username, password, mailbox):
         self.mailbox = mailbox
-        super().__init__("imap.gmail.com")
+        self.imap = imaplib.IMAP4_SSL("imap.gmail.com")
         try:
-            self.login(username, password)
+            self.imap.login(username, password)
         except imaplib.IMAP4.error:
             print("Ошибка входа. Проверьте имя пользователя и пароль.")
-            return
-        self.select(self.mailbox)
-        self.msg_types = {'noreply@ofd.ru':Check_ofd, 'echeck@1-ofd.ru':Check_1_ofd}
+            raise
+        self.imap.select(self.mailbox)
 
-    def get_msg(self, num):
-        self.literal = u"ВКУСВИЛЛ".encode("utf-8")
-        status, messages = self.search('UTF-8', 'SUBJECT')
+    def get_message(self, num):
+        """Получить письмо по номеру."""
+        self.imap.literal = u"ВКУСВИЛЛ".encode("utf-8")
+        status, messages = self.imap.search('UTF-8', 'OR (FROM "noreply-cloudkassir@cp.ru") SUBJECT')
         email_ids = messages[0].split()
-        if num > len(email_ids)-1: 
-            return Check()
-        res, msg = self.fetch(email_ids[num], "(RFC822)")
-        # Получение содержимого письма
+        if num > len(email_ids) - 1:
+            return None  # Возвращаем None, если письма нет
+        res, msg = self.imap.fetch(email_ids[num], "(RFC822)")
         for response_part in msg:
             if isinstance(response_part, tuple):
-                # Парсинг письма
                 msg = email.message_from_bytes(response_part[1])
-                msg_from = re.search('^.*\<(\S*\@\S*)\>\s*$', msg['from']).group(1)
-                if msg.is_multipart():
-                    for part in msg.walk():
-                        if "text/" in part.get_content_type():
-                            return self.msg_types[msg_from](msg_type=msg_from, msg_body=part.get_payload(decode=True))
-                else:
-                    return self.msg_types[msg_from](msg_type=msg_from, msg_body=msg.get_payload(decode=True).decode())
+                return msg
+        return None
+
+    def close(self):
+        """Закрыть соединение."""
+        self.imap.close()
+        self.imap.logout()
+
+class Message:
+    def __init__(self, username, password, mailbox):
+        self.imap_handler = IMAPHandler(username, password, mailbox)
+        self.msg_types = {
+            'noreply@ofd.ru': Check_ofd,
+            'echeck@1-ofd.ru': Check_1_ofd,
+            'noreply-cloudkassir@cp.ru': CheckPDF
+        }
+
+    def get_msg(self, num):
+        """Получить и обработать письмо."""
+        msg = self.imap_handler.get_message(num)
+        if not msg:
+            return Check()
+
+        msg_from = re.search(r"[\w.-]+@[\w.-]+", msg['from']).group(0)
+        msg_body = None
+
+        if msg.is_multipart():
+            for part in msg.walk():
+                if "text/" in part.get_content_type() and not msg_body:
+                    msg_body = part.get_payload(decode=True)
+                if "application/pdf" in part.get_content_type():
+                    msg_body = part.get_payload(decode=True)
+        else:
+            msg_body = msg.get_payload(decode=True).decode()
+
+        return self.msg_types[msg_from](msg_body)
 
 class Check:
     HEADERS = {
@@ -62,12 +113,44 @@ class Check:
     CSV_PARAMS = {"delimiter":";",
                   "quotechar":"|", 
                   "quoting":csv.QUOTE_MINIMAL}
-    def __init__(self, msg_type='no data', msg_body=''):
+    # Константа для индекса даты в check_info
+    CHECK_DATE_INDEX = 2
+
+    def __init__(self, msg_type='no data'):
         self.msg_type = msg_type
-        self.body_list = list(BeautifulSoup(msg_body, 'html.parser').stripped_strings)
         self.check_info = []
         self.items_data = []
         self.parsed = False
+
+    @staticmethod 
+    def parse_russian_datetime(date_string):
+        """
+        Функция для парсинга дат в формате "дд месяц гггг г. в чч:мм"
+        Поддерживает разные падежи месяцев
+        
+        Примеры входных строк:
+        - "06 марта 2025 г. в 13:59"
+        - "19 ноябрь 2024 г. в 11:26"
+        """
+        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        morph = pymorphy2.MorphAnalyzer()
+        # Регулярное выражение для извлечения компонентов даты
+        pattern = r'(\d{1,2})\s+([а-яА-Я]+)\s+(\d{4})\s+г\.\s+в\s+(\d{1,2}:\d{2})'
+        match = re.match(pattern, date_string)
+        if not match:
+            raise ValueError("Неверный формат даты")
+        day, month_ru, year, time = match.groups()
+        # Приводим месяц к родительному падежу
+        month = morph.parse(month_ru)[0].inflect({'gent'}).word.title()
+        # Формируем строку для парсинга
+        date_str = f"{day} {month} {year} {time}"
+        # Парсим в datetime объект
+        try:
+            dt = datetime.datetime.strptime(date_str, '%d %B %Y %H:%M')
+        except ValueError as e:
+            raise ValueError(f"Ошибка при парсинге даты: {e}")
+        return dt
+
 
     def parse(self):
         pass
@@ -85,14 +168,15 @@ class Check:
                         spamwriter.writerow(key + row)
                 else:
                     spamwriter.writerow(key + data)
-    def print_status(self, msg_num):
-        print(f"Msg #{msg_num} was loaded. Item count: {len(self.items_data)}. Check date is {self.check_info[2]}")
 
+    def print_status(self, msg_num):
+        print(f"Msg #{msg_num} was loaded. Type: {self.msg_type}. Item count: {len(self.items_data)}. Check date is {self.check_info[2]}")
 
     
 class Check_ofd(Check):
-    def _init__(self, msg_body):
-        super().__init__(msg_type = 'ofd', msg_body = msg_body)
+    def __init__(self, msg_body):
+        super().__init__(msg_type = 'ofd')
+        self.body_list = list(BeautifulSoup(msg_body, 'html.parser').stripped_strings)
 
     def parse(self):
         raw_check_info = []
@@ -103,7 +187,6 @@ class Check_ofd(Check):
         row = []
         for i, tag in enumerate(self.body_list):
             match tag:
-
                 case 'Кассовый чек / Приход':
                     info = True
                     continue
@@ -171,9 +254,10 @@ class Check_ofd(Check):
         self.parsed = True
 
 class Check_1_ofd(Check):
-    def _init__(self, msg_body):
-        super().__init__(msg_type='1-ofd', msg_body=msg_body)
-
+    def __init__(self, msg_body):
+        super().__init__(msg_type='1-ofd')
+        self.body_list = list(BeautifulSoup(msg_body, 'html.parser').stripped_strings)
+        
     def parse(self):
         k = 0
         row = []
@@ -217,24 +301,57 @@ class Check_1_ofd(Check):
         self.items_data = clean_items_data[:]
         self.parsed = True
 
+class CheckPDF(Check):
+    def __init__(self, msg_body):
+        super().__init__(msg_type='pdf')
+        # Создаем байтовый поток вместо записи на диск
+        self.reader = PdfReader(io.BytesIO(msg_body))
+
+    def parse(self):
+        for page in self.reader.pages:
+            text = page.extract_text(extraction_mode='layout')
+            # Регулярное выражение для извлечения полей и значений
+            pattern_header = re.compile(r"(Дата выдачи|Место осуществления расчета|Адрес осуществления расчетов|ИТОГ)\s+(.*)")
+            pattern_fields = re.compile(r"(?:\d+ +)(.+?)\s+(\d+,\d+)\s+(\d+,\d+)\s+(\d+,\d+)", re.MULTILINE)
+            # Поиск совпадений
+            matches_header = re.findall(pattern_header, text)
+            matches_fields = re.findall(pattern_fields, text)
+            for field, value in matches_header:
+                match field:
+                    case 'Дата выдачи': check_date = Check.parse_russian_datetime(value.strip())
+                    case 'Место осуществления расчета': address = value.strip()
+                    case 'Адрес осуществления расчетов': address_2 = value.strip()
+                    case 'ИТОГ': total = normalize('NFKD', value.strip()).replace(',','.').replace(' ','')
+            for product_name, price, quantity, amount in matches_fields:
+                self.items_data.append([product_name.strip(), price.strip().replace(',','.'), quantity.strip().replace(',','.'), amount.strip().replace(',','.'), 'N/A'])
+        self.check_info = [address, address_2, check_date, 'N/A', total]
+        self.parsed = True
+
 if __name__ == "__main__":
     config = dotenv_values('Vkusvill/.env')
-    msg = Message(username = config['GMAIL_USERNAME'],
-                  password=config['GMAIL_PASSWORD'],
-                  mailbox=config['MAILBOX'])
-    for i in range(1000):
-        latest_loaded_id = get_increment()
-        new_check = msg.get_msg(latest_loaded_id)            
-        new_check.parse()
-        if new_check.parsed:
-            for data_type in ('check_info', 'items_data'):
-                new_check.write_to_csv(data_type=data_type,
-                                       key=[latest_loaded_id, new_check.msg_type],
-                                       csv_location=CSV_LOCATIONS[data_type],
-                                       headers_required=latest_loaded_id>0
-                )
-            new_check.print_status(latest_loaded_id)
-            set_increment()
-        else:
-            print('No data. Break.')
-            break
+    increment_handler = IncrementHandler(INCREMENT_FILE)
+    msg = Message(
+        username=config['GMAIL_USERNAME'],
+        password=config['GMAIL_PASSWORD'],
+        mailbox=config['MAILBOX']
+    )
+    try:
+        for i in range(100):
+            latest_loaded_id = increment_handler.get()
+            new_check = msg.get_msg(latest_loaded_id)
+            new_check.parse()
+            if new_check.parsed:
+                for data_type in ('check_info', 'items_data'):
+                    new_check.write_to_csv(
+                        data_type=data_type,
+                        key=[latest_loaded_id, new_check.msg_type],
+                        csv_location=CSV_LOCATIONS[data_type],
+                        headers_required=latest_loaded_id == 0
+                    )
+                new_check.print_status(latest_loaded_id)
+                increment_handler.set()
+            else:
+                print('No data. Break.')
+                break
+    finally:
+        msg.imap_handler.close()  # Закрыть соединение с IMAP

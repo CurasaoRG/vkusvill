@@ -225,7 +225,7 @@ class Check_ofd(Check):
             except IndexError:
                 description, price, qty, payment, unit_measure = 'N/A', 'N/A', 'N/A', 'N/A', 'N/A'
             self.items_data.append([description, price, qty, payment, unit_measure])
-        if not self.items_data: self.items_data = [None,None,None,None,None]
+        if not self.items_data: self.items_data = [[None,None,None,None,None]]
         address, check_date, check_cashier, total, check_num, shift_num, check_inn, check_rn, check_fd, check_fn, check_fpd  = None, None, None, None, None, None, None, None, None, None, None
         address_2 = 'N/A'
         position = -1
@@ -336,7 +336,7 @@ if __name__ == "__main__":
         mailbox=config['MAILBOX']
     )
     try:
-        for i in range(100):
+        for i in range(600):
             latest_loaded_id = increment_handler.get()
             new_check = msg.get_msg(latest_loaded_id)
             new_check.parse()
@@ -346,7 +346,7 @@ if __name__ == "__main__":
                         data_type=data_type,
                         key=[latest_loaded_id, new_check.msg_type],
                         csv_location=CSV_LOCATIONS[data_type],
-                        headers_required=latest_loaded_id == 0
+                        headers_required=(latest_loaded_id == 0)
                     )
                 new_check.print_status(latest_loaded_id)
                 increment_handler.set()
@@ -355,3 +355,6 @@ if __name__ == "__main__":
                 break
     finally:
         msg.imap_handler.close()  # Закрыть соединение с IMAP
+
+
+        ### добавить обработку падений - чтобы пропускал письмо и делал пометку в спец файл, расширить класс для инкрементов?

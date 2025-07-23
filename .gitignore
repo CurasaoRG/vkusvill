@@ -1,0 +1,4 @@
+.env
+creds.json
+data/check_info.csv
+data/data.csv

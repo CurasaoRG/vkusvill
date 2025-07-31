@@ -21,7 +21,6 @@ class OfdParser(BaseParser):
         html = raw_body.decode() if isinstance(raw_body, bytes) else raw_body
         soup = BeautifulSoup(html, "html.parser")
         strings = list(soup.stripped_strings)
-
         # ---------- Парсинг позиций ----------
         items: list[Item] = []
         info_section = None
@@ -75,13 +74,13 @@ class OfdParser(BaseParser):
                 name = "N/A"
                 price = Decimal(row[0].split(" X ")[1].replace(",", "."))
                 qty = Decimal(row[0].split("X")[0].replace(",", "."))
-                amount = Decimal(row[2].split("=")[1].replace(",", "."))
+                amount = Decimal(row[3].split("=")[1].replace(",", "."))
                 uom = row[4].split(".")[0]
             else:
                 name = row[0]
                 price = Decimal(row[1].split(" X ")[1].replace(",", "."))
                 qty = Decimal(row[1].split("X")[0].replace(",", "."))
-                amount = Decimal(row[2].split("=")[1].replace(",", "."))
+                amount = Decimal(row[3].split("=")[1].replace(",", "."))
                 uom = row[4].split(".")[0]
         except (IndexError, ValueError):
             name, price, qty, amount, uom = "N/A", Decimal("0"), Decimal("0"), Decimal("0"), "шт"
@@ -101,7 +100,6 @@ class OfdParser(BaseParser):
         position = -1
         field_name = None
         data = {}
-
         for idx, text in enumerate(strings):
             if text in fields.keys():
                 field_name = fields[text]

@@ -23,22 +23,30 @@ class Ofd1Parser(BaseParser):
         strings = list(soup.stripped_strings)
 
         # ---------- Парсинг позиций ----------
+        header_strings: list[str] = []
         items: list[Item] = []
         goods_section = False
+        info_section = None
         row: list[str] = []
         k = 0
 
         for text in strings:
             if text == "№":
+                info_section = False
                 goods_section = True
                 continue
             if text == "АО \"Вкусвилл\"":
+                info_section = True
                 goods_section = False
                 continue
-
-            if goods_section:
-                if re.match(r"^\d+\.$", text):  # "1.", "2.", ...
-                    if row:  # сохраняем предыдущий
+            if text == 'ИТОГО:': 
+                info_section = True
+                goods_section = False
+            if info_section:
+                header_strings.append(text) 
+            elif goods_section:
+                if re.match(r"^\d+\.$", text):  
+                    if row:
                         items.append(self._build_item(row))
                     row = [text.rstrip(".")]
                     k = 1
@@ -49,7 +57,7 @@ class Ofd1Parser(BaseParser):
             items.append(self._build_item(row))
 
         # ---------- Парсинг заголовка ----------
-        header_map = self._extract_header(strings)
+        header_map = self._extract_header(header_strings)
         return Check(
             msg_type="1-ofd",
             address1=header_map["address"],
@@ -75,27 +83,8 @@ class Ofd1Parser(BaseParser):
 
     @staticmethod
     def _extract_header(strings: list[str]) -> dict:
-        # Пример порядка строк:
-        # 0: '№', 1: 'АО "Вкусвилл"', 2: 'Адрес: г. Москва, ул. Льва Толстого, 16',
-        # 3: 'ИНН: ...', 4: 'Кассир: Иванов И.И.', 5: 'Дата: 19.07.2024 14:32',
-        # 6: '...', 7: 'ИТОГО: 123,45'
-        address = next(
-            (s.replace("Адрес: ", "").strip() for s in strings if s.startswith("Адрес:")),
-            "",
-        )
-        date_raw = next(
-            (s.replace("Дата: ", "").strip() for s in strings if s.startswith("Дата:")),
-            "",
-        )
-        cashier = next(
-            (s.replace("Кассир: ", "").strip() for s in strings if s.startswith("Кассир:")),
-            "",
-        )
-        total_raw = next(
-            (s.replace("ИТОГО: ", "").strip() for s in strings if s.startswith("ИТОГО:")),
-            "",
-        )
-
-        date_obj = datetime.strptime(date_raw, "%d.%m.%Y %H:%M")
-        total = Decimal(total_raw.replace(",", "."))
-        return {"address": address, "date": date_obj, "cashier": cashier, "total": total}
+        address = strings[2]
+        total = Decimal(strings[9].replace(",", ".")) 
+        check_date = datetime.strptime(strings[6], '%d.%m.%Y %H:%M')
+        cashier = strings[7].split(':')[-1].strip()
+        return {"address": address, "date": check_date, "cashier": cashier, "total": total}

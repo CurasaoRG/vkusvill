@@ -50,17 +50,11 @@ class PdfParser(BaseParser):
         place_re = re.compile(r"Место осуществления расчета\s+(.+)", re.I)
         addr_re = re.compile(r"Адрес осуществления расчетов\s+([^\n]+)",  flags=re.I,)
         item_re = re.compile(
-            r"(?:\d+ +)(.+?)\s+(\d+,\d+)\s+(\d+,\d+)\s+(\d+,\d+)", re.M
+            r"(?:\d+ +)(.+?)\s+(\d+,\d+)\s+(\d+,\d+)\s+(\d+,\d+)\s+(.+)\s+(?:Полный расчёт)", re.MULTILINE
         )
-
-#         item_re = re.compile(
-#     r"^\s*(\d+)\s+(.+?)\s+(\d+(?:\s?\d+)*(?:,\d{2}))\s+(\d+(?:\s?\d+)*(?:,\d{2}))\s+(\d+(?:\s?\d+)*(?:,\d{2}))",
-#     re.MULTILINE | re.DOTALL,
-# )
         text = ""
         for page in reader.pages:
             text += page.extract_text(extraction_mode="layout") + "\n"
-
         # ---------- Дата (устойчивая к падежу) ----------
         m = date_re.search(text)
         if not m:
@@ -96,33 +90,16 @@ class PdfParser(BaseParser):
 
         # ---------- Позиции ----------
         items: List[Item] = []
-        for name, price_s, qty_s, amount_s in item_re.findall(text):
+        for name, price_s, qty_s, amount_s, name_opt in item_re.findall(text):
             items.append(
                 Item(
-                    product_name=name.strip(),
+                    product_name=name.strip()+ ' ' + name_opt.strip() if name_opt.strip()!='' else name.strip(),
                     price=Decimal(price_s.replace(",", ".")),
                     qty=Decimal(qty_s.replace(",", ".")),
                     amount=Decimal(amount_s.replace(",", ".")),
                     uom="шт",  # в PDF ЕИ не указана
                 )
             )
-            print(name, price_s, qty_s, amount_s)
-        # items: list[Item] = []
-        # for num, name, price_s, qty_s, amount_s in item_re.findall(text):
-        #     # собираем многострочное имя в одну строку
-        #     name = re.sub(r"\s+", " ", name.strip())
-        #     items.append(
-        #         Item(
-        #             product_name=name,
-        #             price=Decimal(price_s.replace(" ", "").replace(",", ".")),
-        #             qty=Decimal(qty_s.replace(" ", "").replace(",", ".")),
-        #             amount=Decimal(amount_s.replace(" ", "").replace(",", ".")),
-        #             uom="шт",
-        #         )
-        #     )
-            # print(num, name, price_s, qty_s, amount_s)
-
-
         return Check(
             msg_type="pdf",
             address1=address1,

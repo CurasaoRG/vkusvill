@@ -73,7 +73,7 @@ class ImapClient:
             for part in msg_data:
                 if isinstance(part, tuple):
                     msg = email.message_from_bytes(part[1])
-            mail_from = str(msg.get("From", ""))
+            mail_from = re.search(r"[\w.-]+@[\w.-]+", msg['from']).group(0)
             if msg.is_multipart():
                 for part in msg.walk():
                     if "text/" in part.get_content_type() and not msg_body:

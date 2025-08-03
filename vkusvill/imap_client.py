@@ -71,10 +71,10 @@ class ImapClient:
     # ---------- public API ----------
     def fetch_new_raw(self, since_uid: int = 0) -> Iterator[RawMessage]:
         allowed = self._ensure_cache()
-        msg_body = None
         index = self._find_next_uid(since_uid)
         for uid in sorted(allowed[index:]):
-            if uid <= since_uid:
+            msg_body = None
+            if uid < since_uid:
                 continue
             typ, msg_data = self._imap.uid("FETCH", str(uid), "(RFC822)")
             if typ != "OK":

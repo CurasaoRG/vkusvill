@@ -12,7 +12,7 @@ from unicodedata import normalize
 
 from .base import BaseParser
 from ..models import Check, Item
-
+from ..utils import parse_decimal
 
 class PdfParser(BaseParser):
     """
@@ -84,9 +84,7 @@ class PdfParser(BaseParser):
         total_line = re.search(r"ИТОГ\s+(\d[\d\s]*,\d{2})", text, flags=re.I)
         if not total_line:
             raise ValueError("Не удалось найти итог")
-        total = Decimal(
-            normalize("NFKD", total_line.group(1)).replace(" ", "").replace(",", ".")
-        )
+        total = parse_decimal(normalize("NFKD", total_line.group(1)))
 
         # ---------- Позиции ----------
         items: List[Item] = []
@@ -94,10 +92,10 @@ class PdfParser(BaseParser):
             items.append(
                 Item(
                     product_name=name.strip()+ ' ' + name_opt.strip() if name_opt.strip()!='' else name.strip(),
-                    price=Decimal(price_s.replace(",", ".")),
-                    qty=Decimal(qty_s.replace(",", ".")),
-                    amount=Decimal(amount_s.replace(",", ".")),
-                    uom="шт",  # в PDF ЕИ не указана
+                    price=parse_decimal(price_s),
+                    qty=parse_decimal(qty_s),
+                    amount=parse_decimal(amount_s),
+                    uom="шт", 
                 )
             )
         return Check(

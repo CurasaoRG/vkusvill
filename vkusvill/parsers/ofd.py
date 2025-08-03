@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 
 from .base import BaseParser
 from ..models import Check, Item
-
+from ..utils import parse_decimal
 
 class OfdParser(BaseParser):
     """
@@ -72,15 +72,15 @@ class OfdParser(BaseParser):
         try:
             if "X" in row[0]:
                 name = "N/A"
-                price = Decimal(row[0].split(" X ")[1].replace(",", "."))
-                qty = Decimal(row[0].split("X")[0].replace(",", "."))
-                amount = Decimal(row[3].split("=")[1].replace(",", "."))
+                price = parse_decimal(row[0].split(" X ")[1])
+                qty = parse_decimal(row[0].split("X")[0])
+                amount = parse_decimal(row[3].split("=")[1])
                 uom = row[4].split(".")[0]
             else:
                 name = row[0]
-                price = Decimal(row[1].split(" X ")[1].replace(",", "."))
-                qty = Decimal(row[1].split("X")[0].replace(",", "."))
-                amount = Decimal(row[3].split("=")[1].replace(",", "."))
+                price = parse_decimal(row[1].split(" X ")[1])
+                qty = parse_decimal(row[1].split("X")[0])
+                amount = parse_decimal(row[3].split("=")[1])
                 uom = row[4].split(".")[0]
         except (IndexError, ValueError):
             name, price, qty, amount, uom = "N/A", Decimal("0"), Decimal("0"), Decimal("0"), "шт"
@@ -113,6 +113,5 @@ class OfdParser(BaseParser):
 
         # Преобразуем дату и сумму
         date_obj = datetime.strptime(data.pop("date_raw"), "%d.%m.%y %H:%M")
-        total = Decimal(data.pop("total_raw").replace(",", "."))
-
+        total = parse_decimal(data.pop("total_raw"))
         return {"date": date_obj, "total": total, **data}

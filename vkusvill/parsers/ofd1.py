@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 
 from .base import BaseParser
 from ..models import Check, Item
+from ..utils import parse_decimal
 
 
 class Ofd1Parser(BaseParser):
@@ -73,9 +74,9 @@ class Ofd1Parser(BaseParser):
     def _build_item(row: list[str]) -> Item:
         try:
             description = ",".join(row[1].split(",")[:-1]).strip()
-            price = Decimal(row[2].replace(",", "."))
-            qty = Decimal(row[3].replace(",", "."))
-            amount = Decimal(row[4].replace(",", "."))
+            price = parse_decimal(row[2])
+            qty = parse_decimal(row[3])
+            amount = parse_decimal(row[4])
             uom = row[1].split(",")[-1].strip()
         except (IndexError, ValueError):
             description, price, qty, amount, uom = "N/A", Decimal("0"), Decimal("0"), Decimal("0"), "шт"
@@ -84,7 +85,7 @@ class Ofd1Parser(BaseParser):
     @staticmethod
     def _extract_header(strings: list[str]) -> dict:
         address = strings[2]
-        total = Decimal(strings[9].replace(",", ".")) 
+        total = parse_decimal(strings[9])
         check_date = datetime.strptime(strings[6], '%d.%m.%Y %H:%M')
         cashier = strings[7].split(':')[-1].strip()
         return {"address": address, "date": check_date, "cashier": cashier, "total": total}

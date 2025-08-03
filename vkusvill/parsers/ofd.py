@@ -30,7 +30,7 @@ class OfdParser(BaseParser):
         k = 0
         last_item_field = 0
         for idx, text in enumerate(strings):
-            if text ==  'Кассовый чек / Приход':
+            if text in ('Кассовый чек / Приход', 'Кассовый чек / Возврат прихода'):
                 info_section = True
                 continue
             if text == "check.ofd.ru":

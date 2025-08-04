@@ -1,8 +1,6 @@
 .env
-creds.json
-data/check_info.csv
-data/data.csv
-tests/__pycache__/
-vkusvill/__pycache__/
-vkusvill/parsers/__pycache__/
-tests/files/pdf_test.pdf
+credentials.json
+*.pyc
+*.log
+data/
+tests/files/

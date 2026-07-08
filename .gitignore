@@ -1,0 +1,19 @@
+.env
+credentials.json
+<<<<<<< Updated upstream
+*.pyc
+*.log
+data/
+tests/files/
+=======
+data/check_info.csv
+data/data.csv
+tests/__pycache__/
+vkusvill/__pycache__/
+vkusvill/parsers/__pycache__/
+tests/files/pdf_test.pdf
+data/increment.txt
+error.log
+vkusvill/parsers/logs/ofd1_log_file.log
+>>>>>>> Stashed changes
+.vscode/settings.json

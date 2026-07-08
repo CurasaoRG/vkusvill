@@ -12,3 +12,4 @@ python-dotenv==1.1.0
 lxml==6.0.2
 pymorphy2==0.9.1
 pypdf==5.4.0
+bs4=0.0.2

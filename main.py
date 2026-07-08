@@ -7,33 +7,25 @@ from vkusvill.repository import CsvRepository
 from vkusvill.increment import IncrementHandler
 from vkusvill.gs_uploader import GoogleSheetsUploader
 
-ROOT = Path(__file__).parent
-config = dotenv_values(ROOT / ".env")
-
-repo = CsvRepository(ROOT / "data")
-uploader = GoogleSheetsUploader(ROOT / "credentials.json")
-
-def sync_once(limit=100):
-    # --- existing IMAP logic, but:
-    # 1. returns raw message (bytes or str)
-    # 2. calls parse_message(raw) -> Check
-    # 3. repo.append_check(id, check)
-    pass
-
-if __name__ == "__main__":
-    sync_once()
-    uploader.upload_csv("check_info", repo.check_info)
-    uploader.upload_csv("detailed_data", repo.items)
-
 
 ROOT = Path(__file__).parent
 config = dotenv_values(ROOT / ".env")
 repo = CsvRepository(ROOT / "data")
 inc = IncrementHandler(ROOT / "data" / "increment.txt")
+uploader = GoogleSheetsUploader(ROOT / "credentials.json")
+error_file = ROOT / "logs" /"error.log"
 
-with ImapClient(config["GMAIL_USERNAME"], config["GMAIL_PASSWORD"], config["MAILBOX"]) as client:
-    for raw_msg in client.fetch_new_raw(since_uid=inc.get()):
-        check = parse_message(raw_msg.raw_bytes, raw_msg.mail_from)
-        repo.append_check(check_id=int(raw_msg.uid), check=check)
-        inc.set(int(raw_msg.uid))
-
+if __name__ == "__main__":
+    with ImapClient(config["GMAIL_USERNAME"], config["GMAIL_PASSWORD"], config["MAILBOX"]) as client:
+        for raw_msg in client.fetch_new_raw(since_uid=inc.get()):
+            try:
+                check = parse_message(raw_msg.raw_bytes, raw_msg.mail_from)
+                repo.append_check(check_id=int(raw_msg.uid), check=check)
+                inc.set(int(raw_msg.uid))
+                print(f"PARSED: check_type = {raw_msg.mail_from}, uid = {raw_msg.uid}")
+            except Exception as e:
+                with error_file.open('a')as f:
+                    f.write(f"PARSING ERROR: check_type = {raw_msg.mail_from}, uid = {raw_msg.uid}\n")
+                    f.write(f"ERROR: {e}\n")
+    uploader.upload_csv("check_info", repo.check_info)
+    uploader.upload_csv("detailed_data", repo.items)

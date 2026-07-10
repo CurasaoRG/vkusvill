@@ -10,9 +10,9 @@ from typing import List
 from pypdf import PdfReader
 from unicodedata import normalize
 
-from .base import BaseParser
-from ..models import Check, Item
-from ..utils import parse_decimal
+from src.parsers.base import BaseParser
+from src.models import Check, Item
+from src.utils import parse_decimal
 
 class PdfParser(BaseParser):
     """

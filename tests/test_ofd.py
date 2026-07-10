@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from email import policy
 from email.parser import BytesParser
-from vkusvill.parsers.ofd import OfdParser
+from src.parsers.ofd import OfdParser
 from datetime import datetime 
 from decimal import Decimal
 

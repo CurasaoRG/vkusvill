@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime
 from decimal import Decimal
-from vkusvill.models import Item, Check
+from src.models import Item, Check
 
 
 class TestItem(unittest.TestCase):

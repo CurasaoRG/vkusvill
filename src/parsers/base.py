@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from ..models import Check
+from src.models import Check
 
 class BaseParser(ABC):
     @abstractmethod

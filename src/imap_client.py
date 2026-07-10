@@ -2,16 +2,11 @@ from __future__ import annotations
 
 import imaplib
 import email
-from dataclasses import dataclass
 from typing import Iterator, List
 import re
 import bisect
+from src.models import RawMessage
 
-@dataclass
-class RawMessage:
-    uid: str
-    mail_from: str
-    raw_bytes: bytes
 
 
 class ImapClient:

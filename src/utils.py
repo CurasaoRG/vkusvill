@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import re
 from decimal import Decimal
-from datetime import datetime
 
 NON_BREAKING_SPACE = '\xa0'
 

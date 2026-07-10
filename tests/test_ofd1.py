@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 from decimal import Decimal
-from vkusvill.parsers.ofd1 import Ofd1Parser
+from src.parsers.ofd1 import Ofd1Parser
 from datetime import datetime
 from quopri import decodestring
 

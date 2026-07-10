@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from decimal import Decimal
 from datetime import datetime
-from vkusvill.parsers.pdf import PdfParser
+from src.parsers.pdf import PdfParser
 
 # Путь к тестовому PDF-файлу
 TEST_PDF_PATH = Path(__file__).parent / "files" / "pdf_test.pdf"

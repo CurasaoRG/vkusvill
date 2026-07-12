@@ -2,8 +2,9 @@ import csv
 from pathlib import Path
 from typing import Iterable
 from src.models import Check
+from src.repository.base import BaseRepository
 
-class CsvRepository:
+class CsvRepository(BaseRepository):
     CSV_PARAMS = dict(delimiter=";", quotechar="|", quoting=csv.QUOTE_MINIMAL)
 
     def __init__(self, root: Path):

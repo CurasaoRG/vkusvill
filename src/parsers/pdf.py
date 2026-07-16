@@ -1,8 +1,6 @@
-# vkusvill/parsers/pdf.py
 from __future__ import annotations
 
 import re
-from decimal import Decimal
 from datetime import datetime
 from io import BytesIO
 from typing import List
@@ -52,6 +50,7 @@ class PdfParser(BaseParser):
         item_re = re.compile(
             r"(?:\d+ +)(.+?)\s+(\d+,\d+)\s+(\d+,\d+)\s+(\d+,\d+)\s+(.+)\s+(?:Полный расчёт)", re.MULTILINE
         )
+        company_re = re.compile(r'Приход\s+([\S|\s]*?)\s*ИНН (\d{10})', re.I,)
         text = ""
         for page in reader.pages:
             text += page.extract_text(extraction_mode="layout") + "\n"
@@ -72,8 +71,9 @@ class PdfParser(BaseParser):
         )
 
         # ---------- Адрес ----------
-        place = place_re.search(text)
-        address1 = place.group(1).strip() if place else ""
+        place = place_re.search(text).groups()
+        company, company_inn = company_re.search(text).groups()
+        address1 = place[0].strip() if place else ""
         # --- Адрес ---
         addr = addr_re.search(text)
         address2 = addr.group(1).strip() if addr else ""
@@ -100,6 +100,7 @@ class PdfParser(BaseParser):
             )
         return Check(
             msg_type="pdf",
+            company=company,
             address1=address1,
             address2=address2,
             date=date,

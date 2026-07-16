@@ -58,6 +58,7 @@ class OfdParser(BaseParser):
         header_map = self._extract_header(header_strings)
         return Check(
             msg_type="ofd",
+            company=header_map.get("company", ""),
             address1=header_map.get("address1", ""),
             address2=header_map.get("address2", ""),
             date=header_map["date"],
@@ -110,7 +111,7 @@ class OfdParser(BaseParser):
                     data[key.strip()] = val
             elif idx == position and field_name:
                 data[field_name] = text
-
+        data['company'] = strings[0]
         # Преобразуем дату и сумму
         date_obj = datetime.strptime(data.pop("date_raw"), "%d.%m.%y %H:%M")
         total = parse_decimal(data.pop("total_raw"))

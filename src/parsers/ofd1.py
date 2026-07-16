@@ -1,4 +1,3 @@
-# vkusvill/parsers/ofd1.py
 from __future__ import annotations
 
 import re
@@ -36,9 +35,11 @@ class Ofd1Parser(BaseParser):
                 info_section = False
                 goods_section = True
                 continue
-            if text == "АО \"Вкусвилл\"":
+            if text.startswith("ИНН"):
                 info_section = True
                 goods_section = False
+                header_strings.append(prev_text)
+                header_strings.append(text)
                 continue
             if text == 'ИТОГО:': 
                 info_section = True
@@ -54,6 +55,7 @@ class Ofd1Parser(BaseParser):
                 elif 0 < k < 5:
                     row.append(text)
                     k += 1
+            prev_text = text[:]
         if row:
             items.append(self._build_item(row))
 
@@ -61,8 +63,9 @@ class Ofd1Parser(BaseParser):
         header_map = self._extract_header(header_strings)
         return Check(
             msg_type="1-ofd",
-            address1=header_map["address"],
-            address2="",
+            company=header_map["company"],
+            address1=header_map["address1"],
+            address2=header_map["address2"],
             date=header_map["date"],
             cashier=header_map["cashier"],
             total=header_map["total"],
@@ -73,19 +76,28 @@ class Ofd1Parser(BaseParser):
     @staticmethod
     def _build_item(row: list[str]) -> Item:
         try:
-            description = ",".join(row[1].split(",")[:-1]).strip()
+            description = row[1].strip()
             price = parse_decimal(row[2])
             qty = parse_decimal(row[3])
             amount = parse_decimal(row[4])
-            uom = row[1].split(",")[-1].strip()
+            uom = ''
         except (IndexError, ValueError):
             description, price, qty, amount, uom = "N/A", Decimal("0"), Decimal("0"), Decimal("0"), "шт"
         return Item(product_name=description, price=price, qty=qty, amount=amount, uom=uom)
 
     @staticmethod
     def _extract_header(strings: list[str]) -> dict:
-        address = strings[2]
-        total = parse_decimal(strings[9])
-        check_date = datetime.strptime(strings[6], '%d.%m.%Y %H:%M')
-        cashier = strings[7].split(':')[-1].strip()
-        return {"address": address, "date": check_date, "cashier": cashier, "total": total}
+        company = strings[0]
+        inn = strings[1].split(':')[-1].strip()
+        address1 = strings[2]
+        address2 = strings[3]
+        total = parse_decimal(strings[11])
+        check_date = datetime.strptime(strings[7], '%d.%m.%Y %H:%M')
+        cashier = strings[8].split(':')[-1].strip()
+        return {
+            "company":company,
+            "address1": address1, 
+            "address2": address2, 
+            "date": check_date, 
+            "cashier": cashier, 
+            "total": total}

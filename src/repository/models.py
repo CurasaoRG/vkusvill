@@ -16,7 +16,7 @@ class CheckInfoModel(Base):
     date = Column(String, nullable=False)
     cashier = Column(String)
     total = Column(Numeric(10, 2), nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.now())
+    created_at = Column(DateTime, default=datetime.now())
     
     items = relationship("CheckItemModel", back_populates="check", cascade="all, delete-orphan")
     
@@ -31,13 +31,13 @@ class CheckItemModel(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     check_id = Column(Integer, ForeignKey('check_info.id', ondelete='CASCADE'), nullable=False)
-    msg_type = Column(String, nullable=False)
-    product_name = Column(String, nullable=False)
-    price = Column(Numeric(10, 2), nullable=False)
-    qty = Column(Numeric(10, 3), nullable=False)
-    amount = Column(Numeric(10, 2), nullable=False)
+    msg_type = Column(String)
+    product_name = Column(String)
+    price = Column(Numeric(10, 2))
+    qty = Column(Numeric(10, 3))
+    amount = Column(Numeric(10, 2))
     uom = Column(String)
-    created_at = Column(DateTime, default=datetime.datetime.now())
+    created_at = Column(DateTime, default=datetime.now())
     
     check = relationship("CheckInfoModel", back_populates="items")
     

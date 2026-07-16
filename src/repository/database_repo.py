@@ -22,6 +22,11 @@ class BaseDatabaseRepository(BaseRepository, ABC):
         
         
         with self._get_session() as session:
+            try:
+                check_model = self._create_check_model(check_id, check)
+                session.add(check_model)
+            except Exception as e:
+                print(e)
             existing = session.query(CheckInfoModel).get(check_id)
             if existing:
                 self._update_check_model(existing, check)
@@ -46,6 +51,7 @@ class BaseDatabaseRepository(BaseRepository, ABC):
         
         check_model.items = [
             CheckItemModel(
+                check_id=check_id,
                 msg_type=check.msg_type,
                 product_name=item.product_name,
                 price=item.price,
@@ -63,6 +69,7 @@ class BaseDatabaseRepository(BaseRepository, ABC):
         
         
         model.msg_type = check.msg_type
+        model.company=check.company
         model.address1 = check.address1
         model.address2 = check.address2
         model.date = check.date.isoformat(timespec="minutes")

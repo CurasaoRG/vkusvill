@@ -14,6 +14,7 @@ class Check:
     
     Attributes:
         msg_type (str): Тип сообщения.
+        company (str): Магазин
         address1 (str): Первый адрес.
         address2 (str): Второй адрес.
         date (datetime): Дата чека.
@@ -22,6 +23,7 @@ class Check:
         items (list[Item]): Список товаров.
     """
     msg_type: str
+    company: str
     address1: str
     address2: str
     date: datetime
@@ -33,6 +35,7 @@ class Check:
         """Формирует строку CSV для информации о чеке."""
         return [
             str(check_id),
+            self.company,
             self.msg_type,
             self.address1,
             self.address2,

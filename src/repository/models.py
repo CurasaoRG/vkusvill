@@ -11,6 +11,7 @@ class CheckInfoModel(Base):
     
     id = Column(Integer, primary_key=True)
     msg_type = Column(String, nullable=False)
+    company = Column(String)
     address1 = Column(String)
     address2 = Column(String)
     date = Column(String, nullable=False)

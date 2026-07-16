@@ -2,7 +2,7 @@
 *.json
 launch.json
 *.pyc
-*.log
+logs/
 data/
 tests/files/
 *.csv

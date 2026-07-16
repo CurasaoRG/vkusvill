@@ -35,8 +35,8 @@ class Check:
         """Формирует строку CSV для информации о чеке."""
         return [
             str(check_id),
-            self.company,
             self.msg_type,
+            self.company,
             self.address1,
             self.address2,
             self.date.isoformat(timespec="minutes"),

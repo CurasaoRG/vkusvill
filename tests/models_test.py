@@ -80,7 +80,9 @@ class TestCheck(unittest.TestCase):
             Item("Product 2", Decimal("5.00"), Decimal("3"), Decimal("15.00"), "шт")
         ]
         self.check = Check(
-            msg_type="SALE",
+            
+            msg_type="sale@sale",
+            company='BIG STORE',
             address1="Store 1",
             address2="Moscow",
             date=datetime(2023, 1, 1, 12, 0),
@@ -93,7 +95,8 @@ class TestCheck(unittest.TestCase):
         """Тест формирования строки информации о чеке"""
         expected_row = [
             "1",
-            "SALE",
+            "sale@sale",
+            'BIG STORE',
             "Store 1",
             "Moscow",
             "2023-01-01T12:00",

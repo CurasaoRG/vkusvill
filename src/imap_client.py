@@ -30,8 +30,15 @@ class ImapClient:
         if self._allowed_cache is not None:
             return self._allowed_cache
 
-        self._imap.literal = u"ВКУСВИЛЛ".encode("utf-8")
-        typ, data = self._imap.uid('SEARCH', 'CHARSET UTF-8', 'OR (FROM "noreply-cloudkassir@cp.ru") SUBJECT')
+        # self._imap.literal = u"ВКУСВИЛЛ".encode("utf-8")
+        # typ, data = self._imap.uid('SEARCH', 'CHARSET UTF-8', 'OR (FROM "noreply-cloudkassir@cp.ru") SUBJECT')
+        senders = [
+            "noreply@ofd.ru",
+            "echeck@1-ofd.ru",
+            "noreply-cloudkassir@cp.ru"
+        ]
+        query = "OR "*(len(senders)-1) + ' '.join([f'FROM "{sender}"' for sender in senders])
+        typ, data = self._imap.uid('SEARCH', 'CHARSET UTF-8', query)
         if typ != "OK":
             raise RuntimeError("IMAP search failed")
         self._allowed_cache  = sorted(set(map(int, data[0].decode().split())))

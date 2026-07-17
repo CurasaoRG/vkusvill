@@ -15,7 +15,7 @@ class CsvRepository(BaseRepository):
 
     def _ensure_headers(self):
         for file, headers in (
-            (self.check_info, ["id", "msg_type", "address1", "address2", "date", "cashier", "total"]),
+            (self.check_info, ["id", "msg_type", "company", "address1", "address2", "date", "cashier", "total"]),
             (self.items, ["id", "msg_type", "product_name", "price", "qty", "amount", "uom"]),
         ):
             if not file.exists() or file.stat().st_size == 0:
